@@ -1,0 +1,454 @@
+---
+title: "STA442 Homework2"
+author: "SongQi Wang  1003439442"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+
+# install.packages('MEMSS')
+# install.packages('nlme')
+# install.packages("INLA", repos=c(getOption("repos"), INLA="https://inla.r-inla-download.org/R/testing"), dep=TRUE)
+# 
+# install.packages("Pmisc", repos = "http://r-forge.r-project.org")
+# install.packages("Hmisc")
+# install.packages("magrittr") 0
+# install.packages("dplyr")   
+
+library(magrittr)    
+library(dplyr)         
+library(rpart)
+library(partykit)
+library(knitr)
+library(tidyverse)
+library(faraway)
+library(lme4)      
+library(SMPracticals)  
+library(nlme)
+library(INLA)
+library(Pmisc)
+library(Hmisc)
+library(MEMSS)
+library(MASS)
+library(ggplot2)
+library(kableExtra)
+
+```
+
+# MathAchieve
+
+## Introduction
+
+In the data set MathAchieve (MEMSS package), there are 7185 observations. We want to see the substantial differences between schools and their behavior. 
+
+## Method
+
+It is easey to see that factors Minority (levels yes and no), and the variable SES (socio-economic status) are clearly fixed effects. We used Linear mixed models, and school is treated as a random effect:
+$$\begin{split}
+Y_{ij}\mid U &\sim N(\mu_{ij}, \sigma^2)\\
+\mu_{ij} &= X_{ij} \beta + U_i\\
+U_i &\sim N(0,\sigma_U^2)
+\end{split}$$
+where:
+
+- $Y_{ij}$ is the individual's MathAchieve $j$ in the school $i$
+
+- $X_{ij}\beta$ contains the intercept, whether the individual is Minority, individual's gender, and individual's socio-economic status.
+
+- $U_i$ is the random effect of different schools.
+
+## Results
+
+```{r, echo=FALSE, warning=FALSE}
+
+# MathAchieve
+
+data("MathAchieve", package = "MEMSS")
+model1 = lmer(MathAch ~ Minority + Sex + SES + (1 | School), data = MathAchieve)
+fix_table1 = summary(model1)$coef
+
+colnames(fix_table1) <- c("Estimate","Std. Error","t value") 
+rownames(fix_table1) <- c("Intercept",
+                        "Minority", 
+                        "SexMale",
+                        "SES")
+
+knitr::kable(fix_table1, digits = 3, caption = "Estimation of fixed effects in linear mixed model")
+```
+
+The results of the fixed effects are summarized in table 1. We ckeck whether it appears that there are substantial differences between schools from the result of random effects. We get $\sigma_U^2 = 3.674$ and $\sigma^2 = 35.909$. So the intraclass correlation coefficient or the proportion of variance explained by $school$ is $\frac{\sigma_U^2}{\sigma^2 + \sigma_U^2} = \frac{3.674}{35.909+3.674} \approx 9.281\%\ $, which is very small. Therefore, the substantial differences between schools are very small.
+
+\newpage
+
+Other obsivations show that our medol is proper and fit the data very well.
+
+From the QQ plot, we can see the normality of our model is satisfied.
+
+From two line plots of the datasets. We can see the Mathachieve of male students is little bit higher, and the Minority has a lower Mathchieve. These two plots are consistent with the estimation of fixed effects.
+
+```{r, echo=FALSE, warning=FALSE, fig.height = 4}
+
+qqnorm(resid(model1))
+
+# ggplot(aes(MathAchieve, x = SES,y = MathAch,group = School, color = Minority, pch = Sex)) +
+#   theme_classic() + geom_point()
+
+a = ggplot(MathAchieve, aes(x = SES,y = MathAch, group = School, color = Sex)) +
+  theme_classic() +
+  geom_line(alpha = 0.2) +
+  geom_line(data = MathAchieve %>% group_by(SES) %>% summarise(MathAch = mean(MathAch)),
+            aes(x = SES,y = MathAch,group = 1),
+            colour = "Purple",
+            size = 0.3) +
+  labs(x="SES", y="MathAchieve")
+
+b = ggplot(MathAchieve, aes(x = SES,y = MathAch, group = School, color = Minority)) +
+  theme_classic() +
+  geom_line(alpha = 0.2) +
+  geom_line(data = MathAchieve %>% group_by(SES) %>% summarise(MathAch = mean(MathAch)),
+            aes(x = SES,y = MathAch,group = 1),
+            colour = "Purple",
+            size = 0.3) +
+  labs(x="SES", y="MathAchieve")
+
+cowplot::plot_grid(a + labs(title = "MathAchieve vs SES, for each school, colored by Sex"),
+                   b + labs(title = "MathAchieve vs SES, for each school, colored by Minority"), nrow = 2)
+```
+
+\newpage
+
+# Drugs treatment program
+
+## Itroduction
+
+The Treatment Episode Data Set – Discharges (TEDS-D) is a national census data system of annual discharges from substance abuse treatment facilities. TEDS-D provides annual data on the number and characteristics of persons discharged from public and private substance abuse treatment programs that receive public funding. Based on this data set, following hypoheses are discussed in this report. 
+
+1.Whether the chance of a young person completing their drug treatment depends on the substance the individual is addicted to, with ‘hard’ drugs (Heroin, Opiates, Methamphetamine, Cocaine) being more difficult to treat than alcohol or marijuana.
+
+2.Some American states have particularly effective
+treatment programs whereas other states have programs which are highly problematic with very low completion rates.
+
+## Methods
+
+Since we were dealing with the success rate of the treatment, we uesd logistic regression model. STFIPS and TOWN are treated as random effects.
+
+$$\begin{split}
+Y_{ij} &\sim Bernoulli(\pi_{i})\\
+\ln (\frac{\pi_i}{1-\pi_i}) &= \mu + X_{ij} \beta + U_i + V_i\\
+U_i &\sim N(0,\sigma_U^2)\\
+V_i &\sim N(0,\sigma_V^2)
+\end{split}$$
+
+where:
+
+- $\pi_{i}$ is the individual's treatment success rate.
+
+- $X_{ij}\beta$ contains the intercept, individual’s primary addiction, age, gender and ethnicity.
+
+- $U_i$ is the random effect of STFIPS.
+
+- $V_i$ is the random effect of TOWN.
+
+To use Bayesian inference, we set following penalized complexity prior. The plots of prior and posterior show that our prior is reasonable, you can see the plots in Appendix:
+$$\begin{split}
+P(\sigma_U > 0.81) &= 5\%\ \\
+P(\sigma_V > 0.63) &= 5\%\ \\
+\end{split}$$
+
+```{r, echo=FALSE, warning=FALSE, results='hide'}
+
+download.file("http://pbrown.ca/teaching/appliedstats/data/drugs.rds",
+"drugs.rds")
+
+xSub = readRDS("drugs.rds")
+
+forInla = na.omit(xSub)
+forInla$y = as.numeric(forInla$completed)
+
+inla_formula = y ~ SUB1 + GENDER + AGE + raceEthnicity + homeless + 
+              f(STFIPS, model = "iid", 
+                prior='pc.prec',
+                param=c(0.81, 0.05)) + 
+              f(TOWN, model = "iid", 
+                prior='pc.prec',
+                param=c(0.63, 0.05))
+
+ires = inla(inla_formula,
+            data = forInla, 
+            family = 'binomial',
+            control.inla = list(strategy='gaussian',
+                                int.strategy='eb'))
+
+sdState = Pmisc::priorPostSd(ires)
+
+# do.call(matplot, sdState$STFIPS$matplot)
+# do.call(legend, sdState$legend)
+
+```
+
+And the null hypoheses we tested are:
+$$\begin{split}
+H_{0} \colon \beta_{Heroin} = \beta_{Opiates} = \beta_{Cocaine/Crack} &= \beta_{Methamphetamine} = \beta_{Alcohol} = 0\\ 
+H_{0} \colon \sigma_U^2 &= \sigma_V^2 = 0\\
+\end{split}$$
+
+\newpage
+
+## Results
+
+
+The results of posterior means and quantiles for model parameters are summarized in table 2. All the model paremeters in the table are exponentialed values of $\beta$. The reference group in the model is marijuana, so it's exponentialed parameter equals to 1. As we can see in the table, the exponentialed parameters of Heroin, Opiates, Methamphetamine and Cocaine are less than 1 and the exponentialed parameter of Alcohol is greater than 1, which means the treatment of Alcohol have a higher success rate than marijuana, and the treatments of these 'hard' drugs have a lower success rate than alcohol and marijuana.
+
+
+```{r, echo=FALSE, warning=FALSE}
+
+toPrint = as.data.frame(rbind(exp(ires$summary.fixed[,
+c(4, 3, 5)]), sdState$summary[, c(4, 3, 5)]))
+sss = "^(raceEthnicity|SUB1|GENDER|homeless|SD)(.[[:digit:]]+.[[:space:]]+| for )?"
+
+toPrint = cbind(variable = gsub(paste0(sss, ".*"),
+"\\1", rownames(toPrint)), category = substr(gsub(sss,
+"", rownames(toPrint)), 1, 25), toPrint)
+
+Pmisc::mdTable(toPrint, digits = 3, mdToTex = TRUE,
+guessGroup = TRUE, caption = "Posterior means and quantiles for model parameters.", position = 'center')
+```
+
+
+\newpage
+
+Additionally, we can plot the credible interval of these parameters to see them more clearly.
+
+```{r, echo=FALSE, warning=FALSE, fig.cap="Estimate and 95% CI"}
+
+ires_beta_mean = ires$summary.fixed[,1]
+ires_beta_low = ires$summary.fixed[,3]
+ires_beta_up = ires$summary.fixed[,5]
+
+rownames(ires$summary.fixed) = c("Sub1: Opiates",
+                                 "Sub1: Heroim",
+                                 "Sub1: Cocaine/Crack",
+                                 "Sub1: Alcohol",
+                                 "Sub1: Methamphetamine",
+                                 "Race: Two or more",
+                                 "Race: Other",
+                                 "Race: Hawaiian",
+                                 "Race: Hispanic",
+                                 "Race: Black",
+                                 "Race: Pacific islander",
+                                 "Race: Asian",
+                                 "Race: American Indian",
+                                 "Race: Alaska Native",
+                                 "Homeless TRUE",
+                                 "Gender Female",
+                                 "Age 18-20",
+                                 "Age 15-17",
+                                 "Age 12-14",
+                                 "Intercept")
+
+ires_beta_plot = tibble(beta = ires_beta_mean,
+                        coef = rownames(ires$summary.fixed),
+                        cilower = ires_beta_low,
+                        cilupper = ires_beta_up) %>% 
+  ggplot(aes( x = coef, y = beta)) +
+  theme_light() + 
+  geom_errorbar(aes(ymin = cilower, ymax = cilupper),width = .1) +
+  geom_point(pch = 21, colour = "black", fill = "red") +
+  coord_flip() + 
+  labs(x = "Coefficient", y = "Estimate and 95% CI")
+
+cowplot::plot_grid(
+  ires_beta_plot + labs("Estimate and 95% CI")
+  )
+
+```
+
+\newpage
+
+```{r, echo=FALSE, warning=FALSE}
+
+
+ires$summary.random$STFIPS$ID = gsub("[[:punct:]]|[[:digit:]]",
+"", ires$summary.random$STFIPS$ID)
+
+ires$summary.random$STFIPS$ID = gsub("DISTRICT OF COLUMBIA",
+"WASHINGTON DC", ires$summary.random$STFIPS$ID)
+
+toprint = cbind(ires$summary.random$STFIPS[1:26, c(1,
+2, 4, 6)], ires$summary.random$STFIPS[-(1:26), c(1, 2, 4, 6)])
+
+colnames(toprint) = gsub("uant", "", colnames(toprint))
+
+knitr::kable(toprint, digits = 1, format = "latex", caption = "The random effects of each US state and town")
+
+```
+
+The random effects of each US state and town are summarized in table 3. The higher the random effect of a state is, the better the treatment programs a state has. The random effect of Virginia is -2.9, which means the treatment programs in Virginia are much less effective than other states. Delaware and Florida have the random effects of 1. Their treatment programs have a higher success rate.
+
+\newpage
+
+## Conclusions
+
+Baes on the model we have, we can conclude that
+
+1.The chance of a young person completing their drug treatment does depend on the substance the individual is addicted to. 'Hard’ drugs (Heroin, Opiates, Methamphetamine, Cocaine) are more difficult to treat than alcohol or marijuana.
+
+2.Some American states have particularly effective treatment programs, such as Delaware and Florida. And some other states' programs are highly problematic with very low completion rates, such as Virgina.
+
+\newpage
+
+# Appendix
+
+```{r, warning=FALSE}
+# MathAchieve
+
+data("MathAchieve", package = "MEMSS")
+model1 = lmer(MathAch ~ Minority + Sex + SES + (1 | School), data = MathAchieve)
+fix_table1 = summary(model1)$coef
+
+colnames(fix_table1) <- c("Estimate","Std. Error","t value") 
+rownames(fix_table1) <- c("Intercept",
+                        "Minority", 
+                        "SexMale",
+                        "SES")
+
+knitr::kable(fix_table1, digits = 3, caption = "Estimation of fixed effects in linear mixed model") %>% kable_styling(position = "center")
+
+```
+
+```{r, warning=FALSE}
+qqnorm(resid(model1))
+
+# ggplot(aes(MathAchieve, x = SES,y = MathAch,group = School, color = Minority, pch = Sex)) +
+#   theme_classic() + geom_point()
+
+a = ggplot(MathAchieve, aes(x = SES,y = MathAch, group = School, color = Sex)) +
+  theme_classic() +
+  geom_line(alpha = 0.2) +
+  geom_line(data = MathAchieve %>% group_by(SES) %>% summarise(MathAch = mean(MathAch)),
+            aes(x = SES,y = MathAch,group = 1),
+            colour = "Purple",
+            size = 0.3) +
+  labs(x="SES", y="MathAchieve")
+
+b = ggplot(MathAchieve, aes(x = SES,y = MathAch, group = School, color = Minority)) +
+  theme_classic() +
+  geom_line(alpha = 0.2) +
+  geom_line(data = MathAchieve %>% group_by(SES) %>% summarise(MathAch = mean(MathAch)),
+            aes(x = SES,y = MathAch,group = 1),
+            colour = "Purple",
+            size = 0.3) +
+  labs(x="SES", y="MathAchieve")
+
+cowplot::plot_grid(a + labs(title = "MathAchieve vs SES, for each school"),b, nrow = 2)
+
+```
+
+```{r, warning=FALSE}
+
+download.file("http://pbrown.ca/teaching/appliedstats/data/drugs.rds",
+"drugs.rds")
+
+xSub = readRDS("drugs.rds")
+
+forInla = na.omit(xSub)
+forInla$y = as.numeric(forInla$completed)
+
+inla_formula = y ~ SUB1 + GENDER + AGE + raceEthnicity + homeless + 
+              f(STFIPS, model = "iid", 
+                prior='pc.prec',
+                param=c(0.81, 0.05)) + 
+              f(TOWN, model = "iid", 
+                prior='pc.prec',
+                param=c(0.63, 0.05))
+
+ires = inla(inla_formula,
+            data = forInla, 
+            family = 'binomial',
+            control.inla = list(strategy='gaussian',
+                                int.strategy='eb'))
+
+sdState = Pmisc::priorPostSd(ires)
+
+do.call(matplot, sdState$STFIPS$matplot)
+do.call(matplot, sdState$TOWN$matplot)
+do.call(legend, sdState$legend)
+
+```
+
+```{r, warning=FALSE}
+toPrint = as.data.frame(rbind(exp(ires$summary.fixed[,
+c(4, 3, 5)]), sdState$summary[, c(4, 3, 5)]))
+sss = "^(raceEthnicity|SUB1|GENDER|homeless|SD)(.[[:digit:]]+.[[:space:]]+| for )?"
+
+toPrint = cbind(variable = gsub(paste0(sss, ".*"),
+"\\1", rownames(toPrint)), category = substr(gsub(sss,
+"", rownames(toPrint)), 1, 25), toPrint)
+
+Pmisc::mdTable(toPrint, digits = 3, mdToTex = TRUE,
+guessGroup = TRUE, caption = "Posterior means and quantiles for model parameters.")
+
+```
+
+```{r, warning=FALSE}
+ires_beta_mean = ires$summary.fixed[,1]
+ires_beta_low = ires$summary.fixed[,3]
+ires_beta_up = ires$summary.fixed[,5]
+
+rownames(ires$summary.fixed) = c("Sub1: Opiates",
+                                 "Sub1: Heroim",
+                                 "Sub1: Cocaine/Crack",
+                                 "Sub1: Alcohol",
+                                 "Sub1: Methamphetamine",
+                                 "Race: Two or more",
+                                 "Race: Other",
+                                 "Race: Hawaiian",
+                                 "Race: Hispanic",
+                                 "Race: Black",
+                                 "Race: Pacific islander",
+                                 "Race: Asian",
+                                 "Race: American Indian",
+                                 "Race: Alaska Native",
+                                 "Homeless TRUE",
+                                 "Gender Female",
+                                 "Age 18-20",
+                                 "Age 15-17",
+                                 "Age 12-14",
+                                 "Intercept")
+
+ires_beta_plot = tibble(beta = ires_beta_mean,
+                        coef = rownames(ires$summary.fixed),
+                        cilower = ires_beta_low,
+                        cilupper = ires_beta_up) %>% 
+  ggplot(aes( x = coef, y = beta)) +
+  theme_light() + 
+  geom_errorbar(aes(ymin = cilower, ymax = cilupper),width = .1) +
+  geom_point(pch = 21, colour = "black", fill = "red") +
+  coord_flip() + 
+  labs(x = "Coefficient", y = "Estimate and 95% CI")
+
+cowplot::plot_grid(
+  ires_beta_plot + labs("Estimate and 95% CI")
+  )
+```
+
+```{r, warning=FALSE}
+ires$summary.random$STFIPS$ID = gsub("[[:punct:]]|[[:digit:]]",
+"", ires$summary.random$STFIPS$ID)
+
+ires$summary.random$STFIPS$ID = gsub("DISTRICT OF COLUMBIA",
+"WASHINGTON DC", ires$summary.random$STFIPS$ID)
+
+toprint = cbind(ires$summary.random$STFIPS[1:26, c(1,
+2, 4, 6)], ires$summary.random$STFIPS[-(1:26), c(1, 2, 4, 6)])
+
+colnames(toprint) = gsub("uant", "", colnames(toprint))
+
+knitr::kable(toprint, digits = 1, format = "latex", caption = "The random effects of each US state and town")
+
+```
+
