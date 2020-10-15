@@ -1,2 +1,2 @@
 # STA442
-# A journey I passed through.
+## A journey I passed through.
