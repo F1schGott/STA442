@@ -1,0 +1,431 @@
+---
+title: "STA442 Homework1"
+author: "SongQi Wang  1003439442"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+
+library(lmtest)
+library(knitr)
+library(ggplot2)
+library(nleqslv)
+library(faraway)
+```
+
+# Fruitflies 
+## Introduction
+
+In the dataset from Faraway, one hundred twenty-five fruit flies were divided randomly into five
+groups of 25 each. The response was the lifetime of the fruit fly in days. One group was kept solitary, while
+another was kept individually with a virgin female each day. Another group was given eight virgin females
+per day. As an additional control the fourth and fifth groups were kept with one or eight pregnant females
+per day (pregnant fruit flies will not mate). The thorax length of each male was measured as this was known
+to affect lifetime.
+
+## Method
+Here, we are using a Gamma generalized linear model to model the lifetimes as a function of the thorax length and activity, and our model would be:
+$$\ln  Longevity = \beta_0 + \beta_1 x_{Thorax} + \beta_2 I_{one} + \beta_3 I_{low} + \beta_4 I_{many} + \beta_5 I_{high}$$
+
+
+## Results
+After we fit a Gamma generalized linear model, we found that the longer the thorax is, the longer the fly will live. Also, we can see that if a fly is isolated, it will live longer. The fruitflies with the hightest activity have lower longevity. This can be inferred from the exponentiated parameter estimates given in table 1. Variables are centered and rescaled before being fit to the model. Although the activity level of one and many has a positive beta, the coresponding p-values are higher than 0.1, which means they are not realiable. 
+```{r, echo=FALSE, warning=FALSE}
+data('fruitfly', package='faraway')
+
+thorax_mean = mean(fruitfly$thorax)
+thorax_sd = sd(fruitfly$thorax)
+thorax_scaled = (fruitfly$thorax - thorax_mean)/thorax_sd
+
+gglm1 = glm(fruitfly$longevity ~ thorax_scaled + fruitfly$activity, family=Gamma(link='log'))
+
+gglm1_table = summary(gglm1)$coef
+
+colnames(gglm1_table) <- c("Exp. Estimate","Std. Error","t value","P-Value") 
+rownames(gglm1_table) <- c("Intercept",
+                        "Thorax Length", 
+                        "Activityone",
+                        "Activitylow",
+                        "Activitymany",
+                        "Activityhigh")
+
+
+knitr::kable(gglm1_table, digits = 3, cap='Estimated parameters of GLM model' )
+```
+
+Other obsivations are consistent with our medol.
+
+Figure 1 is the Scatter plot of the dataset. Genrally, higher value of thorax leads to higher longevity. Also, we can see purple points, who are the fruitflies with highest activity, have lower longevity compered to other points. The scatter plot is consistent with our model.
+
+Figure 2 shows the distribution of data compare to the Gamma generalized linear model we fit, it shows that our model fit the data pretty well.
+
+
+\newpage
+
+```{r, echo=FALSE, warning=FALSE}
+shape = 1/summary(gglm1)$dispersion
+scale = mean(fruitfly$longevity)/shape
+```
+
+```{r, echo=FALSE, warning=FALSE,  fig.height= 4 }
+
+ggplot(fruitfly, aes(x = thorax, y = longevity, color= activity) ) + geom_point()+
+  labs(title="Figure1: Longevity vs Thorax") +
+  labs(x="Thorax", y="Longevity") +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE)+
+  theme(plot.title=element_text(size=15,                                  
+                                    hjust=0.5,
+                                    lineheight=1.2))
+
+ggplot(fruitfly, aes(x=longevity)) +
+  geom_bar(binwidth = 2.5, colour="black", fill="white",aes(y=..density..)) +
+  stat_function(fun=dgamma, args = list(shape = shape, scale = scale), colour="red",fill="red", geom="ribbon", alpha=0.2,  mapping = aes(ymin=0,ymax=..y..)) + 
+  labs(title="Figure2: Gamma generalized linear model") +
+                labs(x="Longevity", y="Density")+
+  theme(plot.title=element_text(size=15,
+                                    hjust=0.5,
+                                    lineheight=1.2))
+
+```
+
+
+
+\newpage
+
+# Smoking Report
+
+## Introduction
+In the 2014 American National Youth Tobacco Survey, there are 22007 pieces of individuals' information. Based on this survey, following hypoheses are discussed in this report.
+
+1. Regular use of chewing tobacco, snuff or dip is no more common amongst Americans of European ancestry than for Hispanic-Americans and African-Americans, once one accounts for the fact that white Americans more likely to live in rural areas and chewing tobacco is a rural phenomenon.
+
+2. The likelihood of having used a hookah or waterpipe on at least one occasion is the same for two individuals of the different sexes, provided their age, ethnicity, and other demographic characteristics
+are similar.
+
+```{r echo=FALSE, results= FALSE, message=FALSE, warning=FALSE}
+
+smokeUrl = 'http://pbrown.ca/teaching/appliedstats/data/smoke.RData'
+(smokeFile = tempfile(fileext='.RData'))
+download.file(smokeUrl, smokeFile, mode='wb')
+(load(smokeFile))
+
+smoke[1:7,c('Age','Sex','Grade','RuralUrban','Race', 'Tried_cigarette_smkg_even','chewing_tobacco_snuff_or','ever_tobacco_hookah_or_wa')]
+
+smoke$everSmoke = factor(smoke$Tried_cigarette_smkg_even, levels=1:2, labels=c('yes','no'))
+smoke$Chew = factor(smoke$chewing_tobacco_snuff_or, labels=c('no','yes'))
+smoke$Hookpipe = factor(smoke$ever_tobacco_hookah_or_wa, labels=c('no','yes'))
+
+
+smokeSub = smoke[smoke$Age != 9 & !is.na(smoke$Race) &	!is.na(smoke$everSmoke), ]
+
+smokeChew = reshape2::dcast(smokeSub,
+	Age + Sex + Race + RuralUrban ~ Chew,
+	length)
+
+smokeHookpipe = reshape2::dcast(smokeSub,
+	Age + Sex + Race + RuralUrban ~ Hookpipe,
+	length)
+
+
+
+smokeChew = na.omit(smokeChew)
+smokeHookpipe = na.omit(smokeHookpipe)
+
+smokeChew$y = cbind(smokeChew$yes, smokeChew$no)
+smokeHookpipe$y = cbind(smokeHookpipe$yes, smokeHookpipe$no)
+
+
+mod_chew = glm( y ~ Age + Sex + Race + RuralUrban, data = smokeChew,family=binomial(link='logit'))
+
+mod_Hookpipe = glm( y ~ Age + Sex + Race + RuralUrban, data = smokeHookpipe,family=binomial(link='logit'))
+
+summary(mod_chew)
+summary(mod_Hookpipe)
+
+TabChew = round(summary(mod_chew)$coefficients, 3)
+TabHookpipe = round(summary(mod_Hookpipe)$coefficients, 3)
+TabChew[,1] = round(exp(TabChew[,1]),3)
+TabHookpipe[,1] = round(exp(TabHookpipe[,1]),3)
+colnames(TabChew) = c("Exp. Estimate","Std. Error","z value","P-Value")
+colnames(TabHookpipe) = c("Exp. Estimate","Std. Error","z value","P-Value")
+rownames(TabChew) = c("Intercept","Age","Female","Black","Hispanic","Asian","Native","Pacific","Rural")
+rownames(TabHookpipe) = c("Intercept","Age","Female","Black","Hispanic","Asian","Native","Pacific","Rural")
+
+```
+## Method
+For our analysis we used a model that included the three races, Hispanic-Americans, African-Americans and White-Americans. We keep the other races to make the model more general.We removed the informations of 9 year olds because their data is suspicious.
+Since we are modeling probabilities,logistic regression model is the best choice. We considered the following model for each of the aforementioned analysis:
+$$\ln  Odds = \beta_0 + \beta_1 x_{Age} + \beta_2 I_{Female} + \beta_3 I_{Black} + \beta_4 I_{Hisp} + \beta_5 I_{Asian} + \beta_6 I_{Native} + \beta_7 I_{Pacif} + \beta_8 I_{Rural}$$
+
+The $Odds$ here is the ratio of probability of a person who is smoking vs non-smoking, $\pi$ is the probability of a person who is smoking:
+
+$$Odds = \frac{\pi}{1-\pi}$$
+
+
+Therefore it can be effected by different factors, such as genderand race.
+Specifically, we tested whether white Americans more likely to live in rural areas and chewing tobacco is a rural phenomenon, compared to Hispanic-Americans, African-Americans and White-Americans .
+We also tested whether the likelihood of having used a hookah or waterpipe on at least one occasion is the same for two individuals of the different sexes.
+So, the null hypoheses we tested are: 
+$$H_{0} \colon \beta_3 = \beta_4 = 0\ \ \ \ H_{0} \colon \beta_8 = 0\ \ \ \ H_{0} \colon \beta_2 = 0 $$ 
+
+\newpage
+
+## Results
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+knitr::kable(TabChew, cap="Modeling odds of regular use of Chewing tobacco")
+
+```
+
+
+In the first model, odd is based on the probability of a person chewing tobacco. From the exponentiated coefficients of our model ,we can see which group effect the odds most. Black-americans are 18% more likely to chew tobacoo than White-americans. Hispanic-americans are 44% more likely to chew tobacoo than white-americans. Clearly, we see that prople from rural areas are about 2.7 times more likely to chew tobacoo. We can conclude that chewing tobacco is a rural phenomenon. Additionally, every time a person grow up one year old, the probability of this person to start chewing tobacco increase 41%.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+knitr::kable(TabHookpipe, cap="Modeling odds of ever using a hookah or waterpipe")
+
+```
+
+
+The second model is based on the probability of a person using a hookah or waterpipe. The odds of using a hookah are a little bit higher for female than male. However, the corresponding p-value is 0.28, which means it is not statistically significant, so we cannot conclude that the likelihood of having used a hookah or waterpipe on at least one occasion is the same for two individuals of the different sexes, provided their age, ethnicity, and other demographic characteristics
+are similar.
+
+\newpage
+
+## Appendix
+
+```{r, warning=FALSE}
+data('fruitfly', package='faraway')
+
+thorax_mean = mean(fruitfly$thorax)
+thorax_sd = sd(fruitfly$thorax)
+thorax_scaled = (fruitfly$thorax - thorax_mean)/thorax_sd
+
+gglm1 = glm(fruitfly$longevity ~ thorax_scaled + fruitfly$activity, family=Gamma(link='log'))
+
+gglm1_table = summary(gglm1)$coef
+
+colnames(gglm1_table) <- c("Exp. Estimate","Std. Error","t value","P-Value") 
+rownames(gglm1_table) <- c("Intercept",
+                        "Thorax Length", 
+                        "Activityone",
+                        "Activitylow",
+                        "Activitymany",
+                        "Activityhigh")
+
+
+knitr::kable(gglm1_table, digits = 3, cap='Estimated parameters of GLM model' )
+```
+
+```{r, warning=FALSE}
+shape = 1/summary(gglm1)$dispersion
+scale = mean(fruitfly$longevity)/shape
+```
+```{r, echo=FALSE, warning=FALSE,  fig.height= 4 }
+
+ggplot(fruitfly, aes(x = thorax, y = longevity, color= activity) ) + geom_point()+
+  labs(title="Figure1: Longevity vs Thorax") +
+  labs(x="Thorax", y="Longevity") +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE)+
+  theme(plot.title=element_text(size=15,                                  
+                                    hjust=0.5,
+                                    lineheight=1.2))
+
+ggplot(fruitfly, aes(x=longevity)) +
+  geom_bar(binwidth = 2.5, colour="black", fill="white",aes(y=..density..)) +
+  stat_function(fun=dgamma, args = list(shape = shape, scale = scale), colour="red",fill="red", geom="ribbon", alpha=0.2,  mapping = aes(ymin=0,ymax=..y..)) + 
+  labs(title="Figure2: Gamma generalized linear model") +
+                labs(x="Longevity", y="Density")+
+  theme(plot.title=element_text(size=15,
+                                    hjust=0.5,
+                                    lineheight=1.2))
+
+```
+
+```{r, warning=FALSE}
+
+smokeUrl = 'http://pbrown.ca/teaching/appliedstats/data/smoke.RData'
+(smokeFile = tempfile(fileext='.RData'))
+download.file(smokeUrl, smokeFile, mode='wb')
+(load(smokeFile))
+
+smoke[1:7,c('Age','Sex','Grade','RuralUrban','Race',
+            'Tried_cigarette_smkg_even',
+            'chewing_tobacco_snuff_or',
+            'ever_tobacco_hookah_or_wa')]
+
+smoke$everSmoke = factor(smoke$Tried_cigarette_smkg_even, levels=1:2, labels=c('yes','no'))
+smoke$Chew = factor(smoke$chewing_tobacco_snuff_or, labels=c('no','yes'))
+smoke$Hookpipe = factor(smoke$ever_tobacco_hookah_or_wa, labels=c('no','yes'))
+
+
+smokeSub = smoke[smoke$Age != 9 & !is.na(smoke$Race) &	!is.na(smoke$everSmoke), ]
+
+smokeChew = reshape2::dcast(smokeSub,
+	Age + Sex + Race + RuralUrban ~ Chew,
+	length)
+
+smokeHookpipe = reshape2::dcast(smokeSub,
+	Age + Sex + Race + RuralUrban ~ Hookpipe,
+	length)
+
+
+
+smokeChew = na.omit(smokeChew)
+smokeHookpipe = na.omit(smokeHookpipe)
+
+smokeChew$y = cbind(smokeChew$yes, smokeChew$no)
+smokeHookpipe$y = cbind(smokeHookpipe$yes, smokeHookpipe$no)
+
+
+mod_chew = glm( y ~ Age + Sex + Race + RuralUrban, data = smokeChew,family=binomial(link='logit'))
+
+mod_Hookpipe = glm( y ~ Age + Sex + Race + RuralUrban, data = smokeHookpipe,family=binomial(link='logit'))
+
+summary(mod_chew)
+summary(mod_Hookpipe)
+
+TabChew = round(summary(mod_chew)$coefficients, 3)
+TabHookpipe = round(summary(mod_Hookpipe)$coefficients, 3)
+TabChew[,1] = round(exp(TabChew[,1]),3)
+TabHookpipe[,1] = round(exp(TabHookpipe[,1]),3)
+colnames(TabChew) = c("Exp. Estimate","Std. Error","z value","P-Value")
+colnames(TabHookpipe) = c("Exp. Estimate","Std. Error","z value","P-Value")
+rownames(TabChew) = c("Intercept","Age","Female","Black",
+                      "Hispanic","Asian","Native","Pacific","Rural")
+rownames(TabHookpipe) = c("Intercept","Age","Female","Black",
+                          "Hispanic","Asian","Native","Pacific","Rural")
+
+knitr::kable(TabChew, cap="Modeling odds of regular use of Chewing tobacco")
+knitr::kable(TabHookpipe, cap="Modeling odds of ever using a hookah or waterpipe")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r ,warning=FALSE}
+
+chewTable = as.data.frame(summary(mod_chew)$coef)
+chewTable
+
+chewTable$lower = chewTable$Estimate - 2*chewTable$'Std. Error'
+chewTable$upper = chewTable$Estimate + 2*chewTable$'Std. Error'
+chewoddsRatio = exp(chewTable[,c('Estimate','lower','upper')])
+rownames(chewoddsRatio)[1] = 'baseline prob'
+chewoddsRatio[1,] = chewoddsRatio[1,]/(1+chewoddsRatio[,1])
+chewoddsRatio
+
+rownames(chewoddsRatio) = gsub("Race|RuralUrban|C$", "",
+                                rownames(chewoddsRatio) )
+rownames(chewoddsRatio) = gsub("SexF","Female",
+                                rownames(chewoddsRatio))
+knitr::kable(chewoddsRatio, digits=3)
+
+toPredict = smokeChew[smokeChew$RuralUrban == 'Urban', ]
+
+chewPred = as.data.frame(predict(mod_chew, toPredict,  se.fit=TRUE))
+chewPred$lower = chewPred$fit - 2*chewPred$se.fit
+chewPred$upper = chewPred$fit + 2*chewPred$se.fit
+chewPredExp = exp(chewPred[,c('fit','lower','upper')])
+chewPredProb = chewPredExp / (1+chewPredExp)
+
+plot_1 = data.frame(toPredict$Age,chewPredProb$fit,toPredict$Sex,toPredict$Race)
+
+colnames(plot_1)[1]='Age'
+colnames(plot_1)[2]='Prob'
+colnames(plot_1)[3]='Sex'
+colnames(plot_1)[4]='Race'
+
+ggplot(plot_1, aes(x= Age,y=Prob, col = Race, pch = Sex) )+
+  labs(title="Probability of chewing tobacco vs Age") +
+  labs(x="Age", y="Probability") +
+  geom_point()+
+  theme(plot.title=element_text(size=15,
+                                    hjust=0.5,
+                                    lineheight=1.2))
+
+ggplot(plot_1, aes(x= Race,y=Prob, col = Sex, pch = Sex) )+
+  geom_boxplot()+ coord_flip()+
+  geom_jitter(position = position_jitter(width=0, height=0))+
+  labs(title="Probability vs Race") +
+  labs(x="Probability of chewing tobacco", y="Race") +
+  theme(plot.title=element_text(size=15,
+                                    hjust=0.5,
+                                    lineheight=1.2))
+
+
+```
+
+
+
+
+```{r, echo=FALSE, warning=FALSE, fig.height=4}
+# smokeTable = as.data.frame(summary(smokeFit2)$coef)
+# smokeTable$lower = smokeTable$Estimate - 2*smokeTable$'Std. Error'
+# smokeTable$upper = smokeTable$Estimate + 2*smokeTable$'Std. Error'
+# 
+# smokeOddsRatio = exp(smokeTable[,c('Estimate','lower','upper')])
+# rownames(smokeOddsRatio)[1] = 'baseline prob'
+# smokeOddsRatio[1,] = smokeOddsRatio[1,]/(1+smokeOddsRatio[,1])
+# smokeOddsRatio
+# # '
+# # ' make row names nicer
+# # + newNames
+# rownames(smokeOddsRatio) = gsub("Race|RuralUrban|C$", "",
+#                                 rownames(smokeOddsRatio) )
+# rownames(smokeOddsRatio) = gsub("SexF","Female",
+#                                 rownames(smokeOddsRatio))
+# knitr::kable(smokeOddsRatio, digits=3)
+# # 
+# toPredict = smokeAgg[smokeAgg$RuralUrban == 'Urban', ]
+# smokePred = as.data.frame(predict(smokeFit2, toPredict,  se.fit=TRUE))
+# smokePred$lower = smokePred$fit - 2*smokePred$se.fit
+# smokePred$upper = smokePred$fit + 2*smokePred$se.fit
+# smokePredExp = exp(smokePred[,c('fit','lower','upper')])
+# smokePredProb = smokePredExp / (1+smokePredExp)
+# 
+# plot_1 = data.frame(toPredict$Age,smokePredProb$fit,toPredict$Sex,toPredict$Race)
+# plot_1
+# colnames(plot_1)[1]='Age'
+# colnames(plot_1)[2]='Prob'
+# colnames(plot_1)[3]='Sex'
+# colnames(plot_1)[4]='Race'
+
+# ggplot(plot_1, aes(x= Age,y=Prob, col = Race, pch = Sex) )+
+#   labs(title="Probability vs Age") +
+#   labs(x="Age", y="Probability") +
+#   geom_point()+
+#   theme(plot.title=element_text(size=15,
+#                                     hjust=0.5,
+#                                     lineheight=1.2))
+# 
+# ggplot(plot_1, aes(x= Race,y=Prob, col = Sex, pch = Sex) )+
+#   geom_boxplot()+ coord_flip()+
+#   geom_jitter(position = position_jitter(width=0, height=0))+
+#   labs(title="Probability vs Race") +
+#   labs(x="Probability", y="Race") +
+#   theme(plot.title=element_text(size=15,
+#                                     hjust=0.5,
+#                                     lineheight=1.2))
+
+
+```
+
+
+
+
+
+
