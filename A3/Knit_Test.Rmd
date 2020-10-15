@@ -1,0 +1,132 @@
+---
+title: "STA442 Homework3"
+author: "SongQi Wang  1003439442"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+
+```
+
+# CO2
+
+## Introduction
+
+The dataset of Atmoshperic Carbon Dioxide concentrations is from the observatory in Haiwaii, made available by the Scripps ${CO_2}$ Program at scrippsco2.ucsd.edu. We would like to know if the following events effect the concentration of $CO_2$.
+
+- the OPEC oil embargo which began in October 1973;
+- the global economic recessions around 1980-1982;
+- the fall of the Berlin wall almost exactly 30 years ago, preceding a dramatic fall in industrial production in the Soviet Union and Eastern Europe
+- China joining the WTO on 11 December 2001, which was followed by rapid growth in industrial production;
+- the bankruptcy of Lehman Brothers on 15 September 2008, regarded as the symbolic start of the most recent global financial crisis; and
+- the signing of the Paris Agreement on 12 December 2015, intended to limit $CO_2$ emissions.
+
+## Method
+
+In the dataset of concentrations of $CO_2$, we can see the trend of $CO_2$ has a period of one year. Therefor we need to do some smoothing and add some B-Splines in our model. So we used a Generalized Additive Model from the Gamma family with a log link function.
+The model is as follows:
+
+$$\begin{split}
+Y_{i} &\sim Gamma(\theta)\\
+\log (E(Y)) =\beta_0 + cos(2 \pi x_i)\beta_1 + sin(2 \pi x_i)\beta_2 &+cos(4 \pi x_i)\beta_3+sin(4 \pi x_i)\beta_4 + U(t_{i}) + V_i\\
+[U_1...U_T]^T &\sim RW2(0,\sigma_U^2)\\
+V_i &\sim N(0,\sigma_V^2)\\
+\end{split}$$
+
+where:
+
+- $Y_i$ is the concentration of $CO_2$ measured on the specific day which occured $x_i$ years.
+- $cos(2 \pi x_i)$ and $sin(2 \pi x_i)$ represent yearly fluctuations, $cos(4 \pi x_i)$ and $sin(4 \pi x_i)$ represent biyearly fluctuations.
+- $U(t)$ is a second-order random walk
+- $V_i$ covers independent variation or over-dispersion
+
+We setthe following as penalized complexity prior:
+
+$$\begin{split}
+P(\sigma_U > \frac{log(1.01)}{26}) &= 50\%\ \\
+P(\sigma_V > 2) &= 50\%\ \\
+\end{split}$$
+
+
+\newpage
+
+## Result
+
+From the 2 plots of Estimated smoothed trend and random effect of CO2, we can see the trend is slightly shallower at 1973, between 1980-82, 1989,and 2001. It is actually vary hard to tell. However, we can see how the trend changes vary clearly from the derivative. 
+
+- In 1973, right after the OPEC oil embargo, the slope of CO2 decreased, since oil is exteremely important to industrial production. The embargo of oil caused economic recessions in western countries. CO2 emissions are decreased.
+- Between 1980-1982, the global economic recessions decreased CO2 emissions.
+- The fall of the Berlin Wall, on 9 November 1989, was a pivotal event in world history which marked the falling of the Iron Curtain. Therefore, we can see the slope crashed at the beginning of 1990, marking the dramatic fall in industrial production in the Soviet Union and Eastern Europe.
+- On 11 December 2001, China joined the WTO. CO2 emissions increased due to the followed rapid growth in industrial production.
+- On 15 September 2008, Lehman Brothers bankrupted, regarded as the symbolic start of the most
+recent global financial crisis. But this event seems did not affect the CO2 emissions very much. The level of emission remains the same level around the global financial crisis and it increased in 2009, which reperesnts the end of the crisis.
+- On 12 December 2015, the signing of the Paris Agreement intended to limit CO2 emissions. It looked effective, since the emissions of CO2 decreased at the beginning of 2016.
+
+
+\newpage
+
+Additionally, we compare the distribution of data to the model we fit, we can see our model fit the data pretty well.
+
+\newpage
+
+# Heat
+
+## Introduction
+
+The IPCC states that:
+*Human activities are estimated to have caused approximately 1.0°C of global warming above preindustrial levels, with a likely range of 0.8°C to 1.2°C. Global warming is likely to reach 1.5°C between 2030 and 2052 if it continues to increase at the current rate.*
+Also, we have a dataset of daily maximum temperature data recorded on Sable Island, off the coast of Nova Scotia. We would like to check whether the statement is consistent with the data.
+
+## Method
+
+In the dataset, we can see the trend of temperature has a period of one year. Smoothing and some B-Splines are required. We also treat weekIid and yearFac as random effects. We used Generalized Additive Mixed Models from the student - t distribution with a degree of freedom follows a prior distribution. The model is as follows:
+
+$$\begin{split}
+Y_{i} &\sim t(n)\\
+Y_i = \beta_0 + cos(2 \pi x_i)\beta_1 + sin(2 \pi x_i)\beta_2 &+ cos(4 \pi x_i)\beta_3+sin(4 \pi x_i)\beta_4 + W(t_i) + U_i + V_i + S_i\\
+[W_1...W_T]^T &\sim RW2(0,\sigma_W^2)\\
+U_i &\sim N(0,\sigma_U^2)\\
+V_i &\sim N(0,\sigma_V^2)\\
+S_i &\sim N(0,\sigma_S^2)\\
+\end{split}$$
+
+where:
+
+- $Y_i$ is the maximum temperature data recorded on the specific day on Sable Island.
+- $cos(2 \pi x_i)$ and $sin(2 \pi x_i)$ represent yearly fluctuations, $cos(4 \pi x_i)$ and $sin(4 \pi x_i)$ represent biyearly fluctuations.
+- $W(t)$ is a second-order random walk
+- $U_i$ is the random effect of weekLid.
+- $V_i$ is the random effect of yearFac.
+- $S_i$ covers independent variation or over-dispersion
+
+We setthe following as penalized complexity prior:
+
+$$\begin{split}
+P(\sigma_W > \frac{0.1}{52*100}) &= 5\%\ \\
+P(\sigma_U > 1) &= 50\%\ \\
+P(\sigma_V > 1) &= 50\%\ \\
+P(\sigma_S > 1) &= 50\%\ \\
+P(n < 10) &= 50\%\ \\
+\end{split}$$
+
+\newpage
+
+## Result
+
+Once we have the model, we can take random samples from the posterior and plot them.
+From the plot, we can see that the temperature nowadays (2019) is approximately 1.0°C higher than preindustrial levels (1900), with a likely range of 0.8°C to 1.2°C. After zeomed in, we can clearly see that the difference will reach 1.5°C between 2030 and 2052 if it continues to increase at the current rate. Therefore, the data from Sable Island is broadly supportive of this statement from the IPCC.
+
+\newpage
+
+Additionally, we compare the distribution of data to the model we fit, we can see our model fit the data pretty well.
+
+\newpage
+
+# Appendix
+
+
